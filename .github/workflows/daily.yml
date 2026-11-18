@@ -1,0 +1,52 @@
+# GitHub Actions に「毎朝 7:17（日本時間）に main.py を動かす」と伝える設定ファイル。
+# GitHub のコンピューターで動くので、自分の Mac の電源が切れていても届く。
+name: 毎朝の論文要約
+
+on:
+  schedule:
+    # 時刻は世界の標準時（UTC）で書く。日本時間は UTC より9時間進んでいる
+    # （GitHub が混んでいると、数分〜30分ほど遅れて始まることがある。毎時0分は特に混むので17分にした）
+    - cron: "17 22 * * *"   # 日本時間 7:17（本番）
+    - cron: "17 1 * * *"    # 日本時間 10:17（予備：本番で送れなかった日だけ送る）
+  # GitHub の画面（Actions タブの「Run workflow」）や `gh workflow run daily.yml` で、今すぐ動かせるようにする
+  workflow_dispatch:
+
+# 記録（sent.json）をコミットして保存するので、リポジトリに書き込む許可を出す
+permissions:
+  contents: write
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. このリポジトリのファイル（main.py・これまでの記録など）を取ってくる
+      - uses: actions/checkout@v4
+
+      # 2. Python を用意して、ライブラリを入れる
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      # 3. 単体テスト（通信しない）。壊れていたら送らずに止める
+      - run: pytest -q
+
+      # 4. main.py を動かす。鍵は Secrets（GitHub の金庫）から環境変数として渡す
+      - run: python main.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+
+      # 5. 記録が増えていればコミットする（使えないので飛ばした論文も、送れなかった日に残す）
+      - name: 記録を保存する
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sent.json
+          if git diff --cached --quiet; then
+            echo "記録に変わりはありません"
+          else
+            git commit -m "記録を追加（$(TZ=Asia/Tokyo date +%Y-%m-%d)）"
+            git push
+          fi
