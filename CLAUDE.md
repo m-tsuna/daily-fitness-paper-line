@@ -35,5 +35,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - LINE は月200通まで。テストで本当に送るのは最小限にし、ふだんは `--dry-run`
 
 ## 進捗
-- 2026-11-18：要件定義書 版1.0 確定 → 実装と単体テスト（15件）完了。7曜日分を `--dry-run` で実際の論文・Gemini で確認済み。T1（本物の送信）・T2（答え合わせ OK）・T3 済み。T2 のあと「結果」の欄を追加
-- 次：本人が新しい LINE 公式アカウントとトークンを用意 → 本物の送信テスト（T1）・要旨との答え合わせ（T2）→ GitHub 公開・Secrets・Actions の確認 → ご主人に読んでもらう（T10）→ 記事
+- 2026-11-18：要件定義 → 実装 → テスト（T1〜T14。まとめテストで頼み方を2回直した）→ GitHub 公開（m-tsuna/daily-fitness-paper-line、Secrets 設定、Actions の手動実行で確認）
+- 試運転：2026-11-19〜11-25（ご主人も友だち追加済みの予定）。毎朝の LINE を本人が読み、気になった点を集めて直す
+- 次：記事の仕上げ（時間の数字・難易度・発展アイデア）→ 1週間後（11/25ごろ）に試運転のふり返り（Actions の記録・飛ばした本数・503 の回数、ご主人の感想）→ 直すときは Feature Branch（feature/xxx → PR → /code-review → 本人の OK → マージ）
