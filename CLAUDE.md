@@ -37,4 +37,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 進捗
 - 2026-11-18：要件定義 → 実装 → テスト（T1〜T14。まとめテストで頼み方を2回直した）→ GitHub 公開（m-tsuna/daily-fitness-paper-line、Secrets 設定、Actions の手動実行で確認）
 - 試運転：2026-11-19〜11-25（ご主人も友だち追加済みの予定）。毎朝の LINE を本人が読み、気になった点を集めて直す
-- 次：記事の仕上げ（時間の数字・難易度・発展アイデア）→ 1週間後（11/25ごろ）に試運転のふり返り（Actions の記録・飛ばした本数・503 の回数、ご主人の感想）→ 直すときは Feature Branch（feature/xxx → PR → /code-review → 本人の OK → マージ）
+- 次：記事の仕上げ（時間の数字・難易度・発展アイデア）→ 1週間後（11/25ごろ）に試運転のふり返り（Actions の記録・飛ばした本数・503 の回数、ご主人の感想）→ 振り返りの結果を「今日の記事に追記」か「振り返りの記事を新しく作る」か、本人と相談して決める（本人の希望。11/18 の記事に予告済み）→ 直すときは Feature Branch（feature/xxx → PR → /code-review → 本人の OK → マージ）
