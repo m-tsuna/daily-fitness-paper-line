@@ -26,7 +26,7 @@ import pubmed
 import summarize
 
 OUT_DIR = Path(__file__).parent / "test_data"
-NG_WORDS = ["明記されていません", "不明です", "安静にしてください", "医師に相談", "である。"]
+NG_WORDS = ["明記されていません", "探索的", "推定値", "感度分析", "不明です", "安静にしてください", "医師に相談", "である。"]
 PLAIN_END = re.compile(r"(?<![まで])(した|った|る)。")  # です・ます で終わっていない文（「ました。」「でした。」は除く）
 MAX_CHARS = 1200  # これより長いと、LINE で読むのが大変
 

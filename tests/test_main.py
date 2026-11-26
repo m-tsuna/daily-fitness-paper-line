@@ -55,6 +55,15 @@ def test_使えない論文は飛ばして次の論文を送る(env, monkeypatch
     assert [(r["pmid"], r.get("skipped", False)) for r in records] == [("1", True), ("2", False)]
 
 
+def test_タイトルを訳せなかった論文は飛ばして次の論文を送る(env, monkeypatch):
+    replies = [summarize.UNTRANSLATED, GOOD]
+    monkeypatch.setattr(summarize, "summarize", lambda *a, **k: replies.pop(0))
+    assert main.main([], now=NOW) == 0
+    records = history.load(config.SENT_FILE)
+    assert [(r["pmid"], r.get("skipped", False)) for r in records] == [("1", True), ("2", False)]
+    assert len(env) == 1
+
+
 def test_LINE_のトークンが無ければ日本語で知らせて終わる(env, monkeypatch, capsys):
     monkeypatch.delenv("LINE_CHANNEL_ACCESS_TOKEN")
     with pytest.raises(SystemExit):

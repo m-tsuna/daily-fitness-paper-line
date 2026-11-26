@@ -83,10 +83,13 @@ def main(argv=None, now=None, sleep=None):
                 fail("AI（Gemini）が混んでいて、日本語の要約を作れませんでした。英語のままでは送りません"
                      " → 10時17分の予備の実行でもう一度試します（手で試すなら、少し時間をおいて動かしてください）")
             tried += 1
-            if summarize.is_useful(result):
+            if result == summarize.UNTRANSLATED:
+                log("  → タイトルを日本語にできなかったので、この論文は飛ばします")
+            elif summarize.is_useful(result):
                 paper, summary = candidate, result
                 break
-            log("  → トレーニング・指導・施術のどれにも使えない論文なので、飛ばします")
+            else:
+                log("  → トレーニング・指導・施術のどれにも使えない論文なので、飛ばします")
             if not args.dry_run:
                 history.add(config.SENT_FILE, records, today, topic["name"], candidate, skipped=True)
             if tried >= config.MAX_SUMMARIES:
