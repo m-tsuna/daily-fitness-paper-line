@@ -1,7 +1,8 @@
 """筋トレ論文デイリー要約：全体の流れ。
 
 毎朝 GitHub Actions が動かす（手元では `python main.py`）。
-  今日もう送った？ → PubMed で探す → Gemini で日本語に要約 → LINE で送る → 記録する
+  今日もう送った？ → PubMed で探す → Gemini で日本語に要約
+  →（やり方が書かれていなければ）関連する別の研究を添える → LINE で送る → 記録する
 
 使い方：
   python main.py               ふつうに動かす（LINE に送る）
@@ -24,6 +25,7 @@ import history
 import line_send
 import message
 import pubmed
+import related
 import summarize
 
 WEEKDAYS = "月火水木金土日"
@@ -100,7 +102,13 @@ def main(argv=None, now=None, sleep=None):
         fail(f"「{topic['name']}」で、現場に使える新しい論文が見つかりませんでした"
              " → config.py の検索の言葉か、探す期間（SEARCH_STEPS）を広げてください")
 
-    text = message.build(paper, summary)
+    # 今日の論文に具体的なやり方が書かれていなければ、関連する別の研究の対応策を添える（見つからなくても送るのは止めない）
+    related_study = None
+    if related.needed(summary):
+        log("🔎 この論文には具体的なやり方が書かれていないので、関連する別の研究を探します")
+        related_study = related.find(gemini_key, paper, summary, log, **kwargs)
+
+    text = message.build(paper, summary, related_study)
     if args.dry_run:
         log("----- 送る文（送っていません） -----")
         log(text)

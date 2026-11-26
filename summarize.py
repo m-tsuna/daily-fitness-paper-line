@@ -24,6 +24,9 @@ JAPANESE = re.compile(r"[\u3041-\u3096\u30a1-\u30fa\u4e00-\u9fff]")
 # どのモデルでもタイトルが英語のままだったときの返り値（その論文は飛ばして、次の論文を試す）
 UNTRANSLATED = "untranslated"
 
+# 具体的なやり方が要旨に無いときの文に必ず入る言葉（AI は「具体的な食事やトレーニングのやり方は…」などと前を変えることがある）
+NO_METHOD_MARK = "この論文には書かれていません"
+
 # 「使えない」と書くときの決まった文（無理にこじつけさせないため）
 NOT_APPLICABLE = "この論文からは言えません"
 
@@ -72,6 +75,7 @@ PROMPT = f"""あなたは、柔道整復師でパーソナルトレーナー、�
 - treatment：施術（柔道整復・ケガの手当てやリハビリ・痛みの評価）にどう使えるか（80文字以内）。
   ケガ・痛み・リハビリ・体の評価を調べた研究でなければ、無理に結びつけず「この論文からは言えません」と書く
   （例：健康な人の筋トレの量や筋力の伸びの研究から「ケガ予防に役立つ」「リハビリの計画に」とは書かない）
+- no_method：training・coaching に「具体的なやり方はこの論文には書かれていません」と書いたら true、書かなかったら false
 - useful：トレーニング・指導・施術の3つのうち、1つでも現場で役立つなら true、どれにも役立たないなら false。
   「効果がなかった」「差がなかった」という結果も、無駄なやり方やサプリを避ける・お客さんに勧めない根拠になるので true にする。
   はっきりした結論が出ていない研究でも、トレーニング・栄養・コンディショニング・ケガを調べた研究なら true にする。
@@ -84,19 +88,23 @@ FIELDS = ["title_ja", "conclusion", "study", "results", "training", "coaching", 
 
 SCHEMA = {
     "type": "object",
-    "properties": {**{name: {"type": "string"} for name in FIELDS}, "useful": {"type": "boolean"}},
-    "required": [*FIELDS, "useful"],
+    "properties": {**{name: {"type": "string"} for name in FIELDS},
+                   "useful": {"type": "boolean"}, "no_method": {"type": "boolean"}},
+    "required": [*FIELDS, "useful", "no_method"],
 }
 
 # 1回の実行の中で、一度駄目だったモデル（もう一度は試さず、時間を節約する）
 unavailable = set()
 
 
-def _post(api_key, model, prompt):
-    """1つのモデルに1回だけ頼む。(HTTP の番号, 返事の文 または None) を返す。通信の失敗は (None, None)。"""
+def _post(api_key, model, prompt, schema=None):
+    """1つのモデルに1回だけ頼む。(HTTP の番号, 返事の文 または None) を返す。通信の失敗は (None, None)。
+
+    schema：返事の形（無ければ要約の形 SCHEMA）。関連する研究を探すとき（related.py）は別の形を渡す
+    """
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json", "responseSchema": SCHEMA},
+        "generationConfig": {"responseMimeType": "application/json", "responseSchema": schema or SCHEMA},
     }
     try:
         r = requests.post(
@@ -127,6 +135,9 @@ def check_summary(data):
         return None
     # 役に立つかは、AI の「はい／いいえ」で受け取る（文の言い方は「言えません」「当てはまりません」などと揺れるため）
     result["useful"] = data.get("useful") is not False
+    # 具体的なやり方が書かれていないか（true なら、関連する別の研究を探して添える）。欄と文の両方を見る
+    result["no_method"] = data.get("no_method") is True or any(
+        NO_METHOD_MARK in result[name] for name in ("training", "coaching"))
     return result
 
 
