@@ -56,3 +56,13 @@ def test_項目が欠けた返事は使わない(monkeypatch):
 def test_役に立つかは_AI_のはい_いいえで決める():
     assert summarize.is_useful(summarize.check_summary(dict(GOOD, useful=True)))
     assert not summarize.is_useful(summarize.check_summary(dict(GOOD, useful=False)))
+
+
+def test_タイトルが英語のままの返事は使わず次のモデルへ(monkeypatch):
+    english = dict(GOOD, title_ja="How Effective is Stretching for Injury Prevention?")
+    result, models, _ = run(monkeypatch, [(200, json.dumps(english)), (200, json.dumps(GOOD))])
+    assert result["title_ja"] == "題" and models == ["light", "big"]
+
+
+def test_英語の言葉が混じった日本語のタイトルは使う():
+    assert summarize.check_summary(dict(GOOD, title_ja="1RM（最大挙上重量）とスクワットの関係"))
