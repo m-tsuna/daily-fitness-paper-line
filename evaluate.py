@@ -116,9 +116,13 @@ def evaluate_paper(key, topic_name, paper):
 def main():
     load_dotenv(config.ENV_FILE)
     key = os.environ["GEMINI_API_KEY"]
-    if len(sys.argv) > 2 and sys.argv[1] == "--pmids":
+    if len(sys.argv) > 1 and sys.argv[1] == "--pmids":
+        ids = [i.strip() for i in (sys.argv[2] if len(sys.argv) > 2 else "").split(",") if i.strip()]
+        if not ids:
+            print("論文の番号がありません → python evaluate.py --pmids 42677907,43064726 のように、カンマ区切りで書いてください")
+            return
         results = []
-        for paper in pubmed.fetch(sys.argv[2].split(",")):
+        for paper in pubmed.fetch(ids):
             record, _ = evaluate_paper(key, "番号を指定", paper)
             if record:
                 results.append(record)

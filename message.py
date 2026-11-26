@@ -46,7 +46,7 @@ def build(paper, summary, related=None):
         lines += [
             "■ 関連する別の研究から（参考）",
             related["text"],
-            f"元の論文：{config.ARTICLE_URL}{related['pmid']}/",
+            f"参考にした論文：{config.ARTICLE_URL}{related['pmid']}/",  # 今日の論文の「元の論文：」と見分けるため
             "",
         ]
     if source:

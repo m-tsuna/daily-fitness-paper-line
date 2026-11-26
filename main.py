@@ -106,7 +106,10 @@ def main(argv=None, now=None, sleep=None):
     related_study = None
     if related.needed(summary):
         log("🔎 この論文には具体的なやり方が書かれていないので、関連する別の研究を探します")
-        related_study = related.find(gemini_key, paper, summary, log, **kwargs)
+        try:
+            related_study = related.find(gemini_key, paper, summary, log, exclude=history.sent_pmids(records), **kwargs)
+        except Exception as e:  # 関連する研究は「おまけ」。思わぬエラーでも、今日の論文は送る
+            log(f"  関連する研究：思わぬエラー（{type(e).__name__}）があったので、添えずに送ります")
 
     text = message.build(paper, summary, related_study)
     if args.dry_run:

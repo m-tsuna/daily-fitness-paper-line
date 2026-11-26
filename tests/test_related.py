@@ -94,15 +94,39 @@ def test_PubMed_につながらなくても止めずに添えない(monkeypatch)
 def test_LINE_の文では別の見出しで_今日の論文の前に添える():
     rel = {"pmid": "9", "title": "t", "abstract": "", "text": "別の研究では…"}
     text = message.build(PAPER, SUMMARY, rel)
-    assert "■ 関連する別の研究から（参考）\n別の研究では…\n元の論文：https://pubmed.ncbi.nlm.nih.gov/9/" in text
+    assert "■ 関連する別の研究から（参考）\n別の研究では…\n参考にした論文：https://pubmed.ncbi.nlm.nih.gov/9/" in text
     assert text.index("関連する別の研究") < text.index("掲載：J")
     assert text.endswith("https://pubmed.ncbi.nlm.nih.gov/1/")  # 最後の行は今日の論文のリンクのまま
     assert "関連する別の研究" not in message.build(PAPER, SUMMARY)
 
 
-def test_やり方が書かれていないかは_欄と文の両方で見る():
-    base = {"title_ja": "題", "conclusion": "c", "study": "s", "results": "r", "training": "使えます",
+def test_やり方が書かれていないかは_ご主人が読む文で決める():
+    base = {"title_ja": "題", "conclusion": "c", "study": "s", "results": "r", "training": "週3回、1RMの70%で行います",
             "coaching": "使えます", "treatment": "c", "useful": True}
-    assert summarize.check_summary(dict(base, no_method=True))["no_method"]
+    assert not summarize.check_summary(dict(base, no_method=True))["no_method"]  # 欄だけ true でも、文にやり方があれば付けない
     assert summarize.check_summary(dict(base, training="具体的な食事のやり方はこの論文には書かれていません。"))["no_method"]
-    assert not summarize.check_summary(dict(base, no_method=False))["no_method"]
+
+
+def test_長すぎる文や統計の言葉が入った文は添えない(monkeypatch):
+    ai(monkeypatch, [(200, json.dumps(QUERY)), (200, json.dumps(dict(PICK, text="あ" * 251)))])
+    assert find() is None
+    ai(monkeypatch, [(200, json.dumps(QUERY)), (200, json.dumps(dict(PICK, text="有意に増えました（95%信頼区間）。")))])
+    assert find() is None
+
+
+def test_もう送った論文は候補にしない(monkeypatch):
+    ai(monkeypatch, [(200, json.dumps(QUERY))])
+    assert related.find("key", PAPER, SUMMARY, log=lambda *_: None, sleep=lambda _: None, exclude={"9"}) is None
+
+
+def test_使えなかったモデルは次の呼び出しで試さず_ログに理由を残す(monkeypatch):
+    logs, models = [], []
+
+    def fake_post(key, model, prompt, schema=None):
+        models.append(model)
+        return (404, None) if model == "light" else (200, json.dumps(QUERY if schema is related.QUERY_SCHEMA else PICK))
+
+    monkeypatch.setattr(summarize, "_post", fake_post)
+    assert related.find("key", PAPER, SUMMARY, log=logs.append, sleep=lambda _: None)["pmid"] == "9"
+    assert models == ["light", "big", "big"]
+    assert any("HTTP 404" in t for t in logs)

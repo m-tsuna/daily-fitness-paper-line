@@ -135,9 +135,9 @@ def check_summary(data):
         return None
     # 役に立つかは、AI の「はい／いいえ」で受け取る（文の言い方は「言えません」「当てはまりません」などと揺れるため）
     result["useful"] = data.get("useful") is not False
-    # 具体的なやり方が書かれていないか（true なら、関連する別の研究を探して添える）。欄と文の両方を見る
-    result["no_method"] = data.get("no_method") is True or any(
-        NO_METHOD_MARK in result[name] for name in ("training", "coaching"))
+    # 具体的なやり方が書かれていないか（true なら、関連する別の研究を探して添える）。
+    # ご主人が読む文で決める（AI の欄だけが true で、文にはやり方が書いてあるときに、要らない関連研究を付けないため）
+    result["no_method"] = any(NO_METHOD_MARK in result[name] for name in ("training", "coaching"))
     return result
 
 

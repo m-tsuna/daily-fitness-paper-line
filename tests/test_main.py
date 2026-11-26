@@ -81,6 +81,16 @@ def test_関連する研究が見つからなくても今日の論文は送る(e
     assert len(env) == 1 and "関連する別の研究" not in env[0]
 
 
+def test_関連する研究で思わぬエラーが起きても今日の論文は送る(env, monkeypatch):
+    monkeypatch.setattr(config, "RELATED_STUDY", True)
+    monkeypatch.setattr(summarize, "summarize", lambda *a, **k: dict(GOOD, no_method=True))
+    def broken(*a, **k):
+        raise KeyError("思わぬ形")
+    monkeypatch.setattr(related, "find", broken)
+    assert main.main([], now=NOW) == 0
+    assert len(env) == 1
+
+
 def test_スイッチを切れば関連する研究を探さない(env, monkeypatch):
     monkeypatch.setattr(config, "RELATED_STUDY", False)
     monkeypatch.setattr(summarize, "summarize", lambda *a, **k: dict(GOOD, no_method=True))

@@ -45,6 +45,10 @@ PICK_PROMPT = """柔道整復師でパーソナルトレーナー（自分もボ
 候補：
 """
 
+MAX_TEXT = 250  # 添える文の長さの上限（頼み方は200文字以内。超えたら使わない）
+# 添える文に入っていたら使わない言葉（統計の言葉。ご主人には分かりにくい）
+NG_WORDS = ["有意", "信頼区間", "効果量", "探索的", "推定値", "P スコア", "Pスコア"]
+
 QUERY_SCHEMA = {
     "type": "object",
     "properties": {"need": {"type": "string"}, "query": {"type": "string"}},
@@ -74,17 +78,26 @@ def _ask(api_key, prompt, schema, log, sleep):
                 try:
                     data = json.loads(text)
                 except ValueError:
+                    log(f"  Gemini（{model}）の返事の形が読めませんでした")
                     break  # 次のモデルへ
                 return data if isinstance(data, dict) else None
             if status in summarize.RETRY_STATUS and attempt < len(config.GEMINI_RETRY_WAITS):
-                sleep(config.GEMINI_RETRY_WAITS[attempt])
+                wait = config.GEMINI_RETRY_WAITS[attempt]
+                log(f"  Gemini（{model}）が混んでいます（HTTP {status}）。{wait}秒待ってやり直します")
+                sleep(wait)
                 continue
+            why = summarize.TIMEOUT if status == summarize.TIMEOUT else (f"HTTP {status}" if status else "通信の失敗")
+            log(f"  Gemini（{model}）を使えませんでした（{why}）")
+            summarize.unavailable.add(model)  # この実行の中では、もう試さない
             break  # 次のモデルへ
     return None
 
 
-def find(api_key, paper, summary, log=print, sleep=time.sleep):
-    """関連する研究を1本探して {"pmid", "title", "text"} を返す。見つからなければ None。"""
+def find(api_key, paper, summary, log=print, sleep=time.sleep, exclude=()):
+    """関連する研究を1本探して {"pmid", "title", "abstract", "text"} を返す。見つからなければ None。
+
+    exclude：候補から外す論文の番号（もう送った・飛ばした論文。同じ論文を「別の研究」として見せないため）
+    """
     try:
         # 1. 探したい対応策と検索の言葉
         q = _ask(api_key, QUERY_PROMPT + f"タイトル：{paper['title']}\n要旨：\n{paper['abstract']}", QUERY_SCHEMA, log, sleep)
@@ -95,7 +108,8 @@ def find(api_key, paper, summary, log=print, sleep=time.sleep):
 
         # 2. PubMed で探す（今日の論文と同じ条件で、病気の治療・動物の研究などを除く）
         term = f"({q['query']}) AND {config.COMMON_FILTER} AND {config.STRONG_TYPES}"
-        ids = [i for i in pubmed.search(term, config.RELATED_DAYS) if i != paper["pmid"]][:config.RELATED_MAX]
+        skip = {paper["pmid"], *exclude}
+        ids = [i for i in pubmed.search(term, config.RELATED_DAYS) if i not in skip][:config.RELATED_MAX]
         candidates = [c for c in pubmed.fetch(ids) if len(c["abstract"]) >= 300]
         if not candidates:
             log("  関連する研究：見つからなかったので、添えずに送ります")
@@ -105,8 +119,8 @@ def find(api_key, paper, summary, log=print, sleep=time.sleep):
         listing = "\n\n".join(f"PMID：{c['pmid']}\nタイトル：{c['title']}\n要旨：\n{c['abstract']}" for c in candidates)
         prompt = PICK_PROMPT.format(need=q.get("need", ""), target=summary.get("study", "")) + listing
         pick = _ask(api_key, prompt, PICK_SCHEMA, log, sleep)
-    except pubmed.PubMedError as e:
-        log(f"  関連する研究：{e}。添えずに送ります")
+    except pubmed.PubMedError:
+        log("  関連する研究：PubMed につながらなかったので、添えずに送ります")
         return None
 
     chosen = {c["pmid"]: c for c in candidates}.get(str((pick or {}).get("pmid", "")).strip())
@@ -114,6 +128,9 @@ def find(api_key, paper, summary, log=print, sleep=time.sleep):
     # 候補に無い番号（AI の作り話）や、日本語でない文は使わない
     if not chosen or not summarize.JAPANESE.search(text):
         log("  関連する研究：対応策に答える論文が無かったので、添えずに送ります")
+        return None
+    if len(text) > MAX_TEXT or any(w in text for w in NG_WORDS):
+        log(f"  関連する研究：文が長すぎるか（{len(text)}文字）、統計の言葉が入っていたので、添えずに送ります")
         return None
     log(f"  関連する研究を添えます：PMID {chosen['pmid']}「{chosen['title'][:60]}…」")
     return {"pmid": chosen["pmid"], "title": chosen["title"], "abstract": chosen["abstract"], "text": text}
