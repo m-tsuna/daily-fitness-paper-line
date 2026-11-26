@@ -17,8 +17,12 @@ import config
 RETRY_STATUS = {429, 500, 503}
 TIMEOUT = "時間切れ"
 
-# ひらがな・カタカナ・漢字（タイトルの訳が英語のままになっていないかを見る）
-JAPANESE = re.compile(r"[\u3040-\u30ff\u4e00-\u9fff]")
+# ひらがな・カタカナ・漢字（タイトルの訳が英語のままになっていないかを見る）。
+# 「・」「ー」などの記号は入れない（「HIIT・MICT」のような英語だけのタイトルを訳したことにしないため）
+JAPANESE = re.compile(r"[\u3041-\u3096\u30a1-\u30fa\u4e00-\u9fff]")
+
+# どのモデルでもタイトルが英語のままだったときの返り値（その論文は飛ばして、次の論文を試す）
+UNTRANSLATED = "untranslated"
 
 # 「使えない」と書くときの決まった文（無理にこじつけさせないため）
 NOT_APPLICABLE = "この論文からは言えません"
@@ -35,7 +39,7 @@ PROMPT = f"""あなたは、柔道整復師でパーソナルトレーナー、�
 - どうしても専門用語を使うときは、すぐ後ろの（ ）で短く説明する（例：メタ分析（たくさんの実験をまとめ直した研究））
 - 数字は「平均7.4kg多く伸びました」のように、何がどれだけ変わったかが分かる形にする
 - 検査や点数の名前（〇〇スコアなど）は、（ ）で何を測るものかを添える
-- 統計の指標（ICC・効果量・オッズ比など）は、名前より意味を書く（例：ICC 0.89 → 測る人が変わっても結果がよく一致しました（0.89。1に近いほど一致））
+- 統計の指標（ICC・オッズ比など）は、名前より意味を書く（例：ICC 0.89 → 測る人が変わっても結果がよく一致しました（0.89。1に近いほど一致））
 - 英語を無理に四字熟語や硬い言葉に訳さない。訳しにくい言葉は、やさしい日本語に元の英語を添える（例：心と体を一緒に使う運動（mind-body exercise））。要旨に無い具体例（種目名など）は足さない
 - ただし、競技や運動の「種類」の言葉は、どんな競技かが浮かぶように一般的な例を（ ）で添える（例：intermittent sports → 走る・止まるを繰り返す競技（サッカー・バスケなど）、endurance sports → 持久系の競技（マラソン・自転車など））
 - 研究の確かさについての注意書き（感度分析・一部の研究を除くと値が変わる・信頼区間が0をまたぐ・探索的な解析 など）は、統計の言葉を訳さず、意味だけを普段の言葉で書く（例：「1つの研究の影響が大きく、まだ確かとは言えません」「研究の数が少なく、まだ確かとは言えません」）。「探索的」「推定値」「感度分析」という言葉は使わない
@@ -48,7 +52,7 @@ PROMPT = f"""あなたは、柔道整復師でパーソナルトレーナー、�
 - 現場での使い方は、要旨の結果をもとに書く。効果が出た条件（期間・タイミングなど）があれば、それも使い方に入れる。結果を言いすぎず、そのまま当てはめられないときは「〜を考える参考になります」のように控えめに書く
 - 研究の対象と違う人に当てはめるとき（健康な人の研究をケガ人に使う など）は、「健康な人の研究ですが」のように前置きする
 - 要旨に無い一般的な助言（「安静にしてください」「医師に相談してください」など）は書かない
-- 病気の薬・がん・動物の研究など、その用途に本当に関係ないときだけ、ほかの言葉を足さず「{NOT_APPLICABLE}」とだけ書く
+- 病気の薬・がん・動物の研究など、その用途に本当に関係ないときだけ、ほかの言葉を足さず「{NOT_APPLICABLE}」とだけ書く（施術・治療法の研究のトレーニング・指導の欄も同じ）
 - 文末は必ず「です」「ます」「ました」「でした」で終える（「〜である」「〜した」で終えない）。短い文にする
 
 各項目：
@@ -115,18 +119,20 @@ def _post(api_key, model, prompt):
 
 
 def check_summary(data):
-    """返事を確かめて整える。足りない項目や、タイトルが英語のままなら None（英語のまま送らないため、送らない）。"""
+    """返事を確かめて整える。足りない項目があれば None（英語のまま送らないため、送らない）。"""
     if not isinstance(data, dict):
         return None
     result = {name: str(data.get(name, "")).strip() for name in FIELDS}
     if not all(result.values()):
         return None
-    # タイトルの訳が英語のまま返ってくることがある（11/26 のまとめテストで1本）。英語のまま送らないため、使わない
-    if not JAPANESE.search(result["title_ja"]):
-        return None
     # 役に立つかは、AI の「はい／いいえ」で受け取る（文の言い方は「言えません」「当てはまりません」などと揺れるため）
     result["useful"] = data.get("useful") is not False
     return result
+
+
+def is_translated(summary):
+    """タイトルが日本語に訳されているか（11/26 のまとめテストで、英語のまま返ってきたことが1本あった）。"""
+    return bool(JAPANESE.search(summary["title_ja"]))
 
 
 def is_useful(summary):
@@ -136,10 +142,12 @@ def is_useful(summary):
 
 def summarize(api_key, paper, log=print, sleep=time.sleep):
     """論文を日本語で要約して返す。全部のモデルで駄目なら None。
+    答えたモデルがどれもタイトルを英語のままにしたら UNTRANSLATED（呼ぶ側はその論文を飛ばす）。
 
     log：途中経過を出す関数（GitHub Actions の記録に残る）
     sleep：待つ関数（テストでは待たないものに差し替える）
     """
+    untranslated = False
     prompt = PROMPT + f"タイトル：{paper['title']}\n研究の種類：{', '.join(paper['types'])}\n要旨：\n{paper['abstract']}"
     for model in config.GEMINI_MODELS:
         model = model.strip()
@@ -152,10 +160,14 @@ def summarize(api_key, paper, log=print, sleep=time.sleep):
                     result = check_summary(json.loads(text))
                 except ValueError:
                     result = None
-                if result:
+                if result and is_translated(result):
                     log(f"  Gemini（{model}）で要約できました")
                     return result
-                log(f"  Gemini（{model}）の返事に足りない項目か、訳されていない項目がありました")
+                if result:
+                    log(f"  Gemini（{model}）がタイトルを英語のまま返しました")
+                    untranslated = True
+                else:
+                    log(f"  Gemini（{model}）の返事に足りない項目がありました")
                 break  # 次のモデルへ
             if status in RETRY_STATUS and attempt < len(config.GEMINI_RETRY_WAITS):
                 wait = config.GEMINI_RETRY_WAITS[attempt]
@@ -166,4 +178,4 @@ def summarize(api_key, paper, log=print, sleep=time.sleep):
             log(f"  Gemini（{model}）を使えませんでした（{why}）")
             unavailable.add(model)
             break  # 次のモデルへ
-    return None
+    return UNTRANSLATED if untranslated else None

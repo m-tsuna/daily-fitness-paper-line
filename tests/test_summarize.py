@@ -64,5 +64,11 @@ def test_タイトルが英語のままの返事は使わず次のモデルへ(m
     assert result["title_ja"] == "題" and models == ["light", "big"]
 
 
+def test_どのモデルもタイトルが英語なら_UNTRANSLATED(monkeypatch):
+    english = json.dumps(dict(GOOD, title_ja="HIIT・MICT: Effects on VO2max"))  # 「・」だけでは訳したことにしない
+    result, models, _ = run(monkeypatch, [(200, english), (200, english)])
+    assert result == summarize.UNTRANSLATED and models == ["light", "big"]
+
+
 def test_英語の言葉が混じった日本語のタイトルは使う():
-    assert summarize.check_summary(dict(GOOD, title_ja="1RM（最大挙上重量）とスクワットの関係"))
+    assert summarize.is_translated(dict(GOOD, title_ja="1RM（最大挙上重量）とスクワットの関係"))
