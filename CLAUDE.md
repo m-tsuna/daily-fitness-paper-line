@@ -16,10 +16,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `pytest -q` 単体テスト（通信しない）。1つだけなら `pytest tests/test_main.py -k 予備`
 - `GEMINI_MODELS=no-such-model python main.py --dry-run` AI が使えないときの動きを試す
 - `HTTPS_PROXY=http://127.0.0.1:9 python main.py --dry-run` 通信できないときを試す
+- `python evaluate.py --pmids 番号,番号` 指定した論文だけでまとめテスト（関連する研究の確認用）
 - `python evaluate.py 2` まとめテスト（各曜日2本を送らずに要約し、自動チェック。結果は `test_data/`。頼み方を変えたら必ず流して、要旨と照らし合わせる）
 
 ## 処理の流れ（複数のファイルにまたがる所）
-- `main.py`：今日送った？（`history.sent_today`）→ `pubmed.candidates()` が候補を1本ずつ渡す → `summarize.summarize()` → `summarize.is_useful()` で3つの用途とも「この論文からは言えません」なら飛ばして次（最大 `MAX_SUMMARIES` 本）→ `message.build()` → `line_send.send()` → `history.add()`
+- `main.py`：今日送った？（`history.sent_today`）→ `pubmed.candidates()` が候補を1本ずつ渡す → `summarize.summarize()` → `summarize.is_useful()` で3つの用途とも「この論文からは言えません」なら飛ばして次（最大 `MAX_SUMMARIES` 本。タイトルが英語のまま＝`UNTRANSLATED` も飛ばす）→ やり方が書かれていなければ（`no_method`）`related.find()` で関連する別の研究を探して添える（見つからなくても送る）→ `message.build()` → `line_send.send()` → `history.add()`
 - 曜日のテーマと検索の言葉は `config.TOPICS`。テーマごとの `steps` で探す期間・研究の種類で絞るかを変えられる（無ければ `SEARCH_STEPS`）
 - 「今日」は日本時間で数える（Actions は UTC）。cron は 7:17（本番）と 10:17（予備）
 - `sent.json` は Actions がコミットして保存する。`"skipped": true` は使えないので飛ばした論文（送ったことにはならないが、次から候補にしない）
@@ -35,9 +36,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - LINE は月200通まで。テストで本当に送るのは最小限にし、ふだんは `--dry-run`
 
 ## 進捗
-- 2026-11-18：要件定義 → 実装 → テスト（T1〜T14。まとめテストで頼み方を2回直した）→ GitHub 公開（m-tsuna/daily-fitness-paper-line、Secrets 設定、Actions の手動実行で確認）
-- 2026-11-19：タイトルを言い換えから元のタイトルの直訳に変えた（本人の希望。PR #1 → レビュー → マージ）。11/18 の記事は投稿済みで直さない → この変更は振り返りの材料にする
-- 11/19：試運転1日目、Actions の定期実行が7:17も10:17も動かず → 本人の OK で手動実行して送った。11/20 の朝に動いたかを確かめる（`gh run list --workflow daily.yml -L 5`）
-- 試運転：2026-11-19〜11-25（ご主人も友だち追加済みの予定）。毎朝の LINE を本人が読み、気になった点を集めて直す
-- 11/19：講師フィードバック受領（作業記録.md）。プラスワン＝振り返りでご主人に「指導・トレーニングに役立つ情報があったか」「分かりにくい部分はなかったか」を聞く
-- 次：記事の仕上げ（時間の数字・難易度・発展アイデア）→ 1週間後（11/25ごろ）に試運転のふり返り（Actions の記録・飛ばした本数・503 の回数、ご主人の感想）→ 日本の論文は入れない（11/18 ご主人「いらない」。日本の研究者の英語の論文は今も候補に入る）。直すこと：PubMed は鍵なしだと1秒3回まで（11/18 に連続の問い合わせで HTTP 429）→ `pubmed._get` に間をあける → 振り返りの結果を「今日の記事に追記」か「振り返りの記事を新しく作る」か、本人と相談して決める（本人の希望。11/18 の記事に予告済み）→ 直すときは Feature Branch（feature/xxx → PR → /code-review → 本人の OK → マージ）
+- 2026-11-18：要件定義 → 実装 → テスト → GitHub 公開（m-tsuna/daily-fitness-paper-line）→ 記事投稿。11/19：タイトルを直訳に（PR #1）
+- 試運転 11/19〜11/26：8日とも届いた（11/19 だけ手動）。定期実行は毎日4〜7時間遅れて 11〜15時に届くが、ご主人「このままでいい」→ 直さない。日本の論文は入れない（ご主人「いらない」）
+- 11/26 振り返り（作業記録.md）：ご主人は毎日読み、11/19・11/25 が役立った。出た点 → PR #2（飛ばす判断・統計の言葉・英語のタイトル）マージ済み → 関連する別の研究を添える（feature/related-study、PR 作成中）。PubMed の間隔（429 対策）もこのブランチで入れた
+- **12/27ごろ：関連する研究の1か月の振り返り**（声をかける）。Actions のログで添えた日数・見つからなかった日数を数え、ご主人に「別の研究から」を自分のトレーニング・お客さんへの説明に使ったか、ずれていた日はないかを聞く → 続けるか `config.RELATED_STUDY = False` にするかを本人が決める
+- 次：PR の本人 OK → マージ → 翌朝の LINE を確かめる → 振り返りの記事を新しく作る（本人が決定。11/18 の記事には追記しない）。直すときは Feature Branch（feature/xxx → PR → /code-review → 本人の OK → マージ）

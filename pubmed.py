@@ -5,11 +5,18 @@
 - efetch：番号から、タイトル・要旨・雑誌名などを XML（入れ子の箱の形のデータ）でもらう
 """
 
+import time
 import xml.etree.ElementTree as ET
 
 import requests
 
 import config
+
+
+# 最後に問い合わせた時刻（続けて問い合わせるときに間をあけるため）
+_last_call = 0.0
+# 待つ関数（テストでは待たないものに差し替える）
+_sleep = time.sleep
 
 
 class PubMedError(Exception):
@@ -18,7 +25,12 @@ class PubMedError(Exception):
 
 def _get(endpoint, params):
     """PubMed に1回問い合わせて、返事（requests の Response）を返す。"""
+    global _last_call
     params = {**params, "db": "pubmed", "tool": config.PUBMED_TOOL}
+    wait = config.PUBMED_INTERVAL - (time.monotonic() - _last_call)
+    if wait > 0:
+        _sleep(wait)  # 鍵なしは1秒に3回まで（超えると HTTP 429）
+    _last_call = time.monotonic()
     try:
         r = requests.get(config.PUBMED_URL + endpoint, params=params, timeout=config.HTTP_TIMEOUT)
     except requests.exceptions.RequestException as e:

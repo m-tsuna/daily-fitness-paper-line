@@ -56,6 +56,7 @@ SEARCH_STEPS = [(30, True), (30, False), (90, True), (90, False), (365, True), (
 SEARCH_MAX = 20          # 1回の検索で番号を取る本数
 MAX_SUMMARIES = 3        # 「現場で使えない」論文を飛ばして、AI に要約を頼む本数の上限（AI の無料枠を使いすぎないため）
 HTTP_TIMEOUT = 30        # 通信の返事を待つ秒数
+PUBMED_INTERVAL = 0.4    # PubMed に続けて問い合わせるときにあける秒数（鍵なしは1秒に3回まで。2026-11-18 に連続で HTTP 429）
 
 # 研究の種類を日本語にする表（LINE の「どんな実験か」に添える）
 STUDY_TYPES_JA = {
@@ -74,6 +75,12 @@ GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/"
 GEMINI_MODELS = os.environ.get("GEMINI_MODELS", "gemini-flash-lite-latest,gemini-flash-latest").split(",")
 GEMINI_RETRY_WAITS = [15, 30]   # 混雑（503）のとき、何秒待ってやり直すか
 GEMINI_TIMEOUT = 120            # 1回の返事を待つ秒数
+
+# ===== 関連する別の研究（今日の論文に具体的なやり方が書かれていない日だけ添える） =====
+# 2026-11-26 から1か月試す（12/27ごろ、ご主人に聞いて続けるか決める）。止めるときは False にして push する（翌朝から元の形）
+RELATED_STUDY = True
+RELATED_DAYS = 365 * 5   # 何日前までに載った論文から探すか（対応策の研究は新しくなくてよいので、5年まで）
+RELATED_MAX = 5          # AI に見せる候補の本数
 
 # ===== LINE =====
 # 一斉送信：公式アカウントの友だち全員に送る（友だちはご主人と確認用の本人だけ。相手の ID がいらない）

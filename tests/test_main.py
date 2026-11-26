@@ -9,6 +9,7 @@ import history
 import line_send
 import main
 import pubmed
+import related
 import summarize
 
 NOW = datetime(2026, 11, 19, 7, 17, tzinfo=ZoneInfo("Asia/Tokyo"))  # 木曜
@@ -62,6 +63,41 @@ def test_タイトルを訳せなかった論文は飛ばして次の論文を�
     records = history.load(config.SENT_FILE)
     assert [(r["pmid"], r.get("skipped", False)) for r in records] == [("1", True), ("2", False)]
     assert len(env) == 1
+
+
+def test_やり方が書かれていなければ関連する研究を添えて送る(env, monkeypatch):
+    monkeypatch.setattr(config, "RELATED_STUDY", True)
+    monkeypatch.setattr(summarize, "summarize", lambda *a, **k: dict(GOOD, no_method=True))
+    monkeypatch.setattr(related, "find", lambda *a, **k: {"pmid": "9", "title": "t", "abstract": "", "text": "別の研究では…"})
+    assert main.main([], now=NOW) == 0
+    assert "■ 関連する別の研究から（参考）" in env[0]
+
+
+def test_関連する研究が見つからなくても今日の論文は送る(env, monkeypatch):
+    monkeypatch.setattr(config, "RELATED_STUDY", True)
+    monkeypatch.setattr(summarize, "summarize", lambda *a, **k: dict(GOOD, no_method=True))
+    monkeypatch.setattr(related, "find", lambda *a, **k: None)
+    assert main.main([], now=NOW) == 0
+    assert len(env) == 1 and "関連する別の研究" not in env[0]
+
+
+def test_関連する研究で思わぬエラーが起きても今日の論文は送る(env, monkeypatch):
+    monkeypatch.setattr(config, "RELATED_STUDY", True)
+    monkeypatch.setattr(summarize, "summarize", lambda *a, **k: dict(GOOD, no_method=True))
+    def broken(*a, **k):
+        raise KeyError("思わぬ形")
+    monkeypatch.setattr(related, "find", broken)
+    assert main.main([], now=NOW) == 0
+    assert len(env) == 1
+
+
+def test_スイッチを切れば関連する研究を探さない(env, monkeypatch):
+    monkeypatch.setattr(config, "RELATED_STUDY", False)
+    monkeypatch.setattr(summarize, "summarize", lambda *a, **k: dict(GOOD, no_method=True))
+    def must_not_call(*a, **k):
+        raise AssertionError("探してはいけない")
+    monkeypatch.setattr(related, "find", must_not_call)
+    assert main.main([], now=NOW) == 0
 
 
 def test_LINE_のトークンが無ければ日本語で知らせて終わる(env, monkeypatch, capsys):

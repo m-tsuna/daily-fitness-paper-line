@@ -11,8 +11,12 @@ def study_type_ja(types):
     return ""
 
 
-def build(paper, summary):
-    """論文の情報と要約から、LINE の文を作る。"""
+def build(paper, summary, related=None):
+    """論文の情報と要約から、LINE の文を作る。
+
+    related：関連する別の研究（related.find の返り値）。あれば「現場での使い方」の後ろに、別の見出しで添える
+    （今日の論文の中身と混ざらないように、「別の研究から」とはっきり分ける）
+    """
     kind = study_type_ja(paper["types"])
     source = "・".join(x for x in [paper["journal"], paper["year"]] if x)
     lines = [
@@ -38,6 +42,13 @@ def build(paper, summary):
         f"・施術：{summary['treatment']}",
         "",
     ]
+    if related:
+        lines += [
+            "■ 関連する別の研究から（参考）",
+            related["text"],
+            f"参考にした論文：{config.ARTICLE_URL}{related['pmid']}/",  # 今日の論文の「元の論文：」と見分けるため
+            "",
+        ]
     if source:
         lines.append(f"掲載：{source}")
     lines.append(f"元の論文：{config.ARTICLE_URL}{paper['pmid']}/")
